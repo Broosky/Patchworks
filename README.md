@@ -11,29 +11,8 @@ This project consists of a set of custom electronics prototyping boards designed
 
 These boards supplement a larger bench setup and include Wi-Fi extensions and additional prototyping space.
 
----
-
-![Schematic](Schematic.png)
-
----
-
-## 🔹 V1.2.0 / Rev 1
-
-- Track fan cycles, store error code in EEPROM + interrogate on startup.
-
----
-
-## 🔹 V1.1.1 / Rev 1
-
-- Helpers, separations, and general review.
-
----
-
-## 🔹 V1.0.0 / Rev 1
-
-- Tracking versions. Functionally the same.
-
----
+> If you found this project useful, interesting, or worth keeping an eye on, consider giving it a ⭐️.
+> It helps others discover the project and motivates me to keep building and sharing more.
 
 ## 🔹 Ideas & Upcoming Changes
 
@@ -41,7 +20,21 @@ These boards supplement a larger bench setup and include Wi-Fi extensions and ad
 - Contain related variables in structs or convert to fully object oriented to encapsulate fixed point arithmetic, LCD functions, and chip setup, among others.
 - Doxygen documentation.
 
----
+## 🔹 Rev 1 Schematic
+
+![Schematic](Schematic.png)
+
+## 🔹 V1.2.0 For Rev 1
+
+- Track fan cycles, store error code in EEPROM + interrogate on startup.
+
+## 🔹 V1.1.1 For Rev 1
+
+- Helpers, separations, and general review.
+
+## 🔹 V1.0.0 For Rev 1
+
+- Tracking versions. Functionally the same.
 
 ## 🔹 General Operation
 
@@ -55,8 +48,6 @@ These boards supplement a larger bench setup and include Wi-Fi extensions and ad
 - Holding the button after POST completes will engage the **power-on latch**
 - The **power-on latch** is managed by the main Arduino Uno, allowing it to **shut down automatically** under certain fault conditions (temperature or inefficient cooling)
 
----
-
 ## 🔹 Bench Layout Overview
 
 - **Front row (to back):**
@@ -69,7 +60,5 @@ These boards supplement a larger bench setup and include Wi-Fi extensions and ad
 
 - **Right side:**
   - Christmas tree
-
----
 
 ![Bench](Bench.jpg)
