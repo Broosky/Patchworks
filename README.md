@@ -22,7 +22,7 @@ These boards supplement a larger bench setup and include Wi-Fi extensions and ad
 
 ## 🔹 Rev 1 Schematic
 
-![Schematic](Schematic.png)
+![Rev 1](<Schematics/Rev 1.png>)
 
 ## 🔹 V1.2.0 For Rev 1
 
