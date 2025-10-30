@@ -9,15 +9,16 @@ This project consists of a set of custom electronics prototyping boards designed
 - A bare ATmega-based Arduino Nano for breadboard-level microcontroller experimentation
 - A bare PIC16F887-IP for similar breadboard-based development (MPLAB X + PICkit 3)
 
-These boards supplement a larger bench setup and include Wi-Fi extensions and additional prototyping space.
+These boards supplement a larger bench setup, including Wi-Fi extensions and additional prototyping space.
 
 > If you found this project useful, interesting, or worth keeping an eye on, consider giving it a ⭐️.
 > It helps others discover the project and motivates me to keep building and sharing more.
 
 ## 🔹 Ideas & Upcoming Changes
 
-- Change to fixed point arithmetic.
-- Contain related variables in structs or convert to fully object oriented to encapsulate fixed point arithmetic, LCD functions, and chip setup, among others.
+- Low voltage detection.
+- Change to fixed-point arithmetic.
+- Contain related variables in structs or convert to fully object-oriented to encapsulate fixed point arithmetic, LCD functions, and chip setup, among others.
 - Doxygen documentation.
 
 ## 🔹 Rev 1 Schematic
@@ -34,7 +35,7 @@ These boards supplement a larger bench setup and include Wi-Fi extensions and ad
 
 ## 🔹 V1.0.0 For Rev 1
 
-- Tracking versions. Functionally the same.
+- Tracking versions. No functional changes.
 
 ## 🔹 General Operation
 
