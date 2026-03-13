@@ -1,7 +1,7 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Program Name: Patchworks (C)                                                                                            //
+// Project: Patchworks                                                                                                     //
 // Author: Jeffrey Bednar                                                                                                  //
-// Copyright (c) Illusion Interactive, 2011 - 2025.                                                                        //
+// Copyright (c) Illusion Interactive, 2011 - 2026.                                                                        //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #ifndef _COMMON_H_
 #define _COMMON_H_

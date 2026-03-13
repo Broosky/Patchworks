@@ -1,7 +1,7 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Program Name: Patchworks (C)                                                                                            //
+// Project: Patchworks                                                                                                     //
 // Author: Jeffrey Bednar                                                                                                  //
-// Copyright (c) Illusion Interactive, 2011 - 2025.                                                                        //
+// Copyright (c) Illusion Interactive, 2011 - 2026.                                                                        //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #ifndef _LCD_H_
 #define _LCD_H_
@@ -21,6 +21,7 @@ void                printLabeledFloat             (uint8_t, uint8_t, const char*
 void                printLabeledInt               (uint8_t, uint8_t, const char* const, int32_t, bool, uint16_t);
 void                printLabeledString            (uint8_t, uint8_t, const char* const, const char* const, bool, uint16_t);
 void                printString                   (uint8_t, uint8_t, const char* const, bool, uint16_t);
+void 				printFloat					  (uint8_t, uint8_t, float, bool, uint16_t);
 void                printUptime                   (uint32_t, uint32_t, uint32_t, uint32_t, uint16_t);
 void                write                         (uint8_t, uint8_t, const char* const, bool);
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -1,7 +1,7 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Program Name: Patchworks (C)                                                                                            //
+// Project: Patchworks                                                                                                     //
 // Author: Jeffrey Bednar                                                                                                  //
-// Copyright (c) Illusion Interactive, 2011 - 2025.                                                                        //
+// Copyright (c) Illusion Interactive, 2011 - 2026.                                                                        //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #include "Headers/lcd.h"
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -58,6 +58,17 @@ void printLabeledString(uint8_t x, uint8_t y, const char* const label, const cha
   delay(lcdPageCycleDelayMs);
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void printFloat(uint8_t x, uint8_t y, float value, bool clearBeforeWrite, uint16_t lcdPageCycleDelayMs) {
+  char buffer[32], floatString[32];
+
+  // Same precision as fixed print.
+  dtostrf(value, 1, 2, floatString);
+  snprintf(buffer, sizeof(buffer), "%s", floatString);
+  write(x, y, buffer, clearBeforeWrite);
+
+  delay(lcdPageCycleDelayMs);
+}
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void printString(uint8_t x, uint8_t y, const char* const text, bool clearBeforeWrite, uint16_t lcdPageCycleDelayMs) {
   write(x, y, text, clearBeforeWrite);
 
@@ -67,8 +78,8 @@ void printString(uint8_t x, uint8_t y, const char* const text, bool clearBeforeW
 void printUptime(uint32_t days, uint32_t hours, uint32_t minutes, uint32_t seconds, uint16_t lcdPageCycleDelayMs) {
   char buffer1[32], buffer2[32];
 
-  sprintf(buffer1, "UP: %02lu d %02lu h", days, hours);
-  sprintf(buffer2, "UP: %02lu m %02lu s", minutes, seconds);
+  sprintf(buffer1, "Up: %02lud %02luh", days, hours);
+  sprintf(buffer2, "Up: %02lum %02lus", minutes, seconds);
 
   printString(0, 0, buffer1, true, 0);
   printString(0, 1, buffer2, false, lcdPageCycleDelayMs);

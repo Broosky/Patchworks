@@ -1,7 +1,14 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Program Name: Patchworks (C)                                                                                                 //
+// Project: Patchworks                                                                                                     //
 // Author: Jeffrey Bednar                                                                                                  //
-// Copyright (c) Illusion Interactive, 2011 - 2025.                                                                        //
+// Copyright (c) Illusion Interactive, 2011 - 2026.                                                                        //
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Educational Use Notice:                                                                                                 //
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// This project is provided for educational and learning purposes only. You are welcome to read, study, and experiment     //
+// with this software and/or hardware. It is not intended for commercial use. This software and/or hardware is provided    //
+// "as is", without warranty of any kind. The author assumes no responsibility for any damages or issues resulting from    //
+// its use.                     																						   //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #include <xc.h>
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
