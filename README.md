@@ -25,7 +25,10 @@ This project consists of a set of custom electronics prototyping boards designed
 - MCU supervised low/high voltage detection for all voltage rails.
 - Hardware overvoltage detection and automatic shutdown via [Snubby](https://github.com/Broosky/Snubby).
 - USB-A power output.
-- Manual disable and breadboard control for the regulator fan.
+- MCU & manual control for the regulator fan.
+- Refine allowed input voltages.
+- Move fuse from GND to VIN.
+- Additional flyback diode on the regulator fan.
 - Firmware review, refactoring, and clean-up.
 
 ## 🔹 V1.2.0 For Rev 1 Schematic
