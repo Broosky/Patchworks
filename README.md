@@ -1,6 +1,6 @@
 # 💡 Patchworks
 
-This project consists of a set of custom electronics prototyping boards designed for testing and monitoring purposes. Each board features:
+This project consists of a set of custom electronics prototyping boards designed for testing and monitoring personal electronics projects. Each board features:
 
 - An MCU controlled LCD display.
 - Voltage, current, power (V/A/W), and ambient temperature gauges.
@@ -20,7 +20,7 @@ This project consists of a set of custom electronics prototyping boards designed
 
 ![Rev 1.1](<Schematics/Rev 1.1.png>)
 
-## 🔹 V1.3.0 For Rev 1.1 Schematic
+## 🔹 V1.3.0 Firmware For Rev 1.1 Schematic
 
 - MCU supervised low/high voltage detection for all voltage rails.
 - Hardware overvoltage detection and automatic shutdown via [Snubby](https://github.com/Broosky/Snubby).
@@ -31,15 +31,19 @@ This project consists of a set of custom electronics prototyping boards designed
 - Additional flyback diode on the regulator fan.
 - Firmware review, refactoring, and clean-up.
 
-## 🔹 V1.2.0 For Rev 1 Schematic
+## 🔹 Rev 1 Construction
+
+![Patchworks Rev 1](<Construction/Patchworks Rev 1.jpg>)
+
+## 🔹 V1.2.0 Firmware For Rev 1 Schematic
 
 - Track fan cycles, store error code in EEPROM + interrogate on startup.
 
-## 🔹 V1.1.1 For Rev 1 Schematic
+## 🔹 V1.1.1 Firmware For Rev 1 Schematic
 
 - Helpers, separations, and general review.
 
-## 🔹 V1.0.0 For Rev 1 Schematic
+## 🔹 V1.0.0 Firmware For Rev 1 Schematic
 
 - Initial release. No functional changes.
 
