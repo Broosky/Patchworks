@@ -29,6 +29,7 @@ This project consists of a set of custom electronics prototyping boards designed
 - Refine allowed input voltages.
 - Move fuse from GND to VIN.
 - Additional flyback diode on the regulator fan.
+- Remove random determinism.
 - Firmware review, refactoring, and clean-up.
 
 ## 🔹 Rev 1 Construction

@@ -10,8 +10,8 @@
 // "as is", without warranty of any kind. The author assumes no responsibility for any damages or issues resulting from    //
 // its use.                                                                                                                //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Date: Tuesday, October 3rd, 2023                                                                                        
-// Description: Source for the Patchworks electronics prototyping and monitoring board.                                    
+// Date: Tuesday, October 3rd, 2023
+// Description: Source for the Patchworks electronics prototyping and monitoring board.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Fold all: Ctrl + K + 0
 // Unfold all: Ctrl + K + J
@@ -106,7 +106,6 @@ const uint16_t THERMISTOR_REFERENCE = 10000;           // Ohms; resistor in the 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const uint16_t DELAY_LOOP_COMPLETED = 750;  // MS
 const uint16_t DELAY_LCD_PAGE_CYCLE = 1850;
-const uint32_t RANDOM_SEED = 255;  // Deterministic randomSeed() starting point.
 const int32_t EXTERNAL_CLOCK_LOWERBOUND = 0;
 const int32_t EXTERNAL_CLOCK_UPPERBOUND = 99;
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -224,9 +223,8 @@ void setup(void) {
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   lcd.init();
   lcd.clear();
-  delay(500);
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  randomSeed(RANDOM_SEED);
+  setupSeed();
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   // Test LCD, buzzer, fan, and set power-on latch.
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -265,6 +263,22 @@ void loop(void) {
   handleUptime(DELAY_LCD_PAGE_CYCLE);
 
   handleLoopEnd(DELAY_LOOP_COMPLETED);
+}
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Seed by mixing analog noise and runtime for a higher degree of entropy.
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void setupSeed() {
+  unsigned long seed = 0;
+
+  for (uint8_t i = 0; i < 32; i++) {
+    for (uint8_t pin = A0; pin <= A5; pin++) {
+      seed ^= analogRead(pin) << (i % 16);
+    }
+    seed ^= micros();
+    delay(5);
+  }
+
+  randomSeed(seed);
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Check and warn if Snubby or breadboard circuitry is reporting an error.
@@ -500,8 +514,12 @@ float handleThermistor(uint8_t writeAdc, uint8_t writeResistance, uint16_t lcdPa
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   if ((ADMUX & ((1 << REFS1) | (1 << REFS0))) != (1 << REFS0)) {
     analogReference(DEFAULT);
-    analogRead(PIN_INPUT_THERMISTOR_SENSE);  // Dummy read.
-    delay(5);
+
+    // Dummy reads.
+    for (uint8_t i = 0; i < 5; i++) {
+      analogRead(PIN_INPUT_THERMISTOR_SENSE);
+      delay(5);
+    }
   }
 
   tempAccumulatedSamples = 0;
@@ -585,8 +603,12 @@ float readVoltage(uint8_t pin) {
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   if ((ADMUX & ((1 << REFS1) | (1 << REFS0))) != (1 << REFS1)) {
     analogReference(INTERNAL);
-    analogRead(pin);  // Dummy read.
-    delay(5);
+
+    // Dummy reads.
+    for (uint8_t i = 0; i < 5; i++) {
+      analogRead(pin);
+      delay(5);
+    }
   }
 
   unsigned long voltageAccumulatedSamples = 0;
