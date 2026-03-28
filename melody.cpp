@@ -3,27 +3,53 @@
 // Author: Jeffrey Bednar                                                                                                  //
 // Copyright (c) Illusion Interactive, 2011 - 2026.                                                                        //
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-#ifndef _FIXED_POINT_H_
-#define _FIXED_POINT_H_
+#include "Headers/melody.h"
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-#include "common.h"
+const MELODY_T melodyTest = {
+  .frequency = 1000,
+  .durationMs = 50,
+  .cycles = 3,
+  .toneCycleDelayMs = 100,
+  .pauseBeforeReturn = true
+};
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-#define FIXED_SHIFT 16
+const MELODY_T melodyFanOn = {
+  .frequency = 2000,
+  .durationMs = 50,
+  .cycles = 3,
+  .toneCycleDelayMs = 100,
+  .pauseBeforeReturn = true
+};
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Types:
+const MELODY_T melodyFanOff = {
+  .frequency = 2000,
+  .durationMs = 50,
+  .cycles = 1,
+  .toneCycleDelayMs = 100,
+  .pauseBeforeReturn = true
+};
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-typedef int32_t fixed16_t;  // 16.16: 32,767.9999847 to -32,768.0
+const MELODY_T melodyVoltageThresholds = {
+  .frequency = 1750,
+  .durationMs = 50,
+  .cycles = 3,
+  .toneCycleDelayMs = 100,
+  .pauseBeforeReturn = true
+};
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Function prototypes:
+const MELODY_T melodyMaxTemp = {
+  .frequency = 3000,
+  .durationMs = 50,
+  .cycles = 3,
+  .toneCycleDelayMs = 100,
+  .pauseBeforeReturn = true
+};
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-fixed16_t       toFixed                       (int32_t, uint8_t);
-int32_t         fromFixed                     (fixed16_t, uint8_t);
-fixed16_t       fixedMultiply                 (fixed16_t, fixed16_t, uint8_t);
-fixed16_t       fixedDivide                   (fixed16_t, fixed16_t, uint8_t);
-fixed16_t       extractComponentAsFixed       (fixed16_t, uint8_t);
-uint32_t        extractFractionalAsNatural    (fixed16_t, uint8_t);
-float           fixedToFloat                  (fixed16_t, uint8_t);
-fixed16_t       fixedLog2                     (fixed16_t, uint8_t);
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-#endif
+const MELODY_T melodyShutdown = {
+  .frequency = 4000,
+  .durationMs = 1000,
+  .cycles = 15,
+  .toneCycleDelayMs = 250,
+  .pauseBeforeReturn = true
+};
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

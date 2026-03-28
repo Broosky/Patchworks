@@ -20,6 +20,11 @@ This project consists of a set of custom electronics prototyping boards designed
 
 ![Rev 1.1](<Schematics/Rev 1.1.png>)
 
+## 🔹 V1.4.0 Firmware For Rev 1.1 Schematic
+
+- Voltage low/high counts + shutdown.
+- Refactoring.
+
 ## 🔹 V1.3.0 Firmware For Rev 1.1 Schematic
 
 - MCU supervised low/high voltage detection for all voltage rails.
@@ -60,7 +65,7 @@ This project consists of a set of custom electronics prototyping boards designed
 - Holding the button after the POST completes will engage the power-on latch.
 - The power-on latch is managed by the main Arduino Uno and/or the breadboard electronics, allowing shutdown automatically under certain fault conditions (temperature, inefficient cooling, overvoltage).
 
-## 🔹 Bench Layout Overview
+## 🔹 Other Repositories
 
 - Front row (to back):
   - [7Driver](https://github.com/Broosky/7Driver)

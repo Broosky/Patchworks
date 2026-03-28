@@ -16,9 +16,11 @@
 // Fold all: Ctrl + K + 0
 // Unfold all: Ctrl + K + J
 // Show file explorer: Ctrl + Shift + E
+// Auto format: Ctrl + T
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 #include "Headers/fixed_point.h"
 #include "Headers/lcd.h"
+#include "Headers/melody.h"
 #include <EEPROM.h>  // 1024 bytes available, addresses: 0 - 1023, width: 8 bits. Degrades.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 extern LiquidCrystal_I2C lcd;
@@ -26,7 +28,7 @@ extern LiquidCrystal_I2C lcd;
 // Firmware version:
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const uint8_t FW_VERSION_MAJOR = 1;
-const uint8_t FW_VERSION_MINOR = 3;
+const uint8_t FW_VERSION_MINOR = 4;
 const uint8_t FW_VERSION_PATCH = 0;
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Types:
@@ -40,6 +42,8 @@ typedef enum ERROR_CODE : uint8_t {  // Align with ERROR_CODE_NAMES.
                                      // As such, if the fan is triggered under normal operation the 5V rail can't supply enough power
                                      // to it, so the cooldown duration can exceed the threshold.
   ERROR_CODE_BREADBOARD,             // The breadboard circuitry is commanding the MCU to shutdown the power.
+  ERROR_CODE_VOLTAGE_HIGH_COUNT,     // Too many cycles for a rail to be at high voltage.
+  ERROR_CODE_VOLTAGE_LOW_COUNT,      // Too many cycles for a rail to be at low voltage.
   ERROR_CODE_COUNT                   // Must be last; for iterating/bounds.
 } ERROR_CODE_T;
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -51,20 +55,12 @@ typedef struct F_EXTREMA {
 typedef struct I32_EXTREMA {
   int32_t min;
   int32_t max;
-} I_EXTREMA_T;
+} I32_EXTREMA_T;
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 typedef struct UI32_EXTREMA {
   uint32_t min;
   uint32_t max;
 } UI32_EXTREMA_T;
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-typedef struct MELODY {
-  uint32_t frequency;
-  int32_t durationMs;
-  uint8_t cycles;
-  uint16_t toneCycleDelayMs;
-  uint8_t pauseBeforeReturn;
-} MELODY_T;
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Program constants:
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -74,21 +70,23 @@ const uint8_t PIN_OUTPUT_RELAY_ENABLE = 6;
 const uint8_t PIN_OUTPUT_PROGRAM_ACTIVE = 2;
 const uint8_t PIN_OUTPUT_EXTERNAL_CLOCK = 10;
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-const uint8_t PIN_INPUT_BB_VCC_SENSE = A1;
-const uint8_t PIN_INPUT_BB_5V_SENSE = A2;
-const uint8_t PIN_INPUT_BB_3V3_SENSE = A3;
+const uint8_t PIN_INPUT_VCC_SENSE = A1;
+const uint8_t PIN_INPUT_5V_SENSE = A2;
+const uint8_t PIN_INPUT_3V3_SENSE = A3;
 const uint8_t PIN_INPUT_THERMISTOR_SENSE = A0;
 const uint8_t PIN_INPUT_BREADBOARD_ERROR_SENSE = 11;
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const uint8_t VOLTAGE_READ_SAMPLES = 16;
 const float VOLTAGE_BANDGAP_REFERENCE = 1.1;  // Should be measured per MCU as this varies.
-const float VOLTAGE_DIVIDER_R1 = 47000.0;     // Common across VCC, 5V, and 3V3 voltage rails (1%). Allows safe input readings
+const float VOLTAGE_DIVIDER_R1 = 47000.0;     // Common across VCC, 5V, and 3V3 voltage rails (1% tolerance). Allows safe input readings
                                               // for comparison with the bandgap if VCC reaches up to 24V. Although the
                                               // Arduino regulator supports up to 12V, this provides additional survivability
                                               // in the event if the main VCC regulator fails or there's a rail short. Regardless, the
                                               // hardware overvoltage protection will trigger at approximately 12.7V, 5.8V,
                                               // and 4.0V for each respective rail.
 const float VOLTAGE_DIVIDER_R2 = 2000.0;
+const uint8_t VOLTAGE_LOW_MAXIMUM_CYCLE_COUNT = 5;
+const uint8_t VOLTAGE_HIGH_MAXIMUM_CYCLE_COUNT = 5;
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const float TEMP_ZERO_KELVIN = 273.15;
 const float TEMP_LOWERBOUND = 37.00;                   // Celcius: fan off, single chirp.
@@ -106,6 +104,7 @@ const uint16_t THERMISTOR_REFERENCE = 10000;           // Ohms; resistor in the 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const uint16_t DELAY_LOOP_COMPLETED = 750;  // MS
 const uint16_t DELAY_LCD_PAGE_CYCLE = 1850;
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 const int32_t EXTERNAL_CLOCK_LOWERBOUND = 0;
 const int32_t EXTERNAL_CLOCK_UPPERBOUND = 99;
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -115,84 +114,33 @@ const char* ERROR_CODE_NAMES[] = {
   "Hot Cycles",
   "Cooldown",
   "Breadboard",
+  "Vlt H Count",
+  "Vlt L Count"
 };
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-const F_EXTREMA vMcuThresholds = { .min = 4.5, .max = 5.5 };
-const F_EXTREMA vBbVccThresholds = { .min = 11.5, .max = 12.5 };
-const F_EXTREMA vBb5VThresholds = { .min = 4.5, .max = 5.5 };
-const F_EXTREMA vBb3V3Thresholds = { .min = 3.0, .max = 3.5 };
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-const MELODY_T buzzerTest = {
-  .frequency = 1000,
-  .durationMs = 50,
-  .cycles = 3,
-  .toneCycleDelayMs = 100,
-  .pauseBeforeReturn = true
-};
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-const MELODY_T buzzerFanOn = {
-  .frequency = 2000,
-  .durationMs = 50,
-  .cycles = 3,
-  .toneCycleDelayMs = 100,
-  .pauseBeforeReturn = true
-};
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-const MELODY_T buzzerFanOff = {
-  .frequency = 2000,
-  .durationMs = 50,
-  .cycles = 1,
-  .toneCycleDelayMs = 100,
-  .pauseBeforeReturn = true
-};
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-const MELODY_T buzzerVoltageThresholds = {
-  .frequency = 1750,
-  .durationMs = 50,
-  .cycles = 3,
-  .toneCycleDelayMs = 100,
-  .pauseBeforeReturn = true
-};
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-const MELODY_T buzzerMaxTemp = {
-  .frequency = 3000,
-  .durationMs = 50,
-  .cycles = 3,
-  .toneCycleDelayMs = 100,
-  .pauseBeforeReturn = true
-};
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-const MELODY_T buzzerShutdown = {
-  .frequency = 4000,
-  .durationMs = 1000,
-  .cycles = 15,
-  .toneCycleDelayMs = 250,
-  .pauseBeforeReturn = true
-};
+const F_EXTREMA_T thresholdsMcu = { .min = 4.25, .max = 5.75 };
+const F_EXTREMA_T thresholdsVcc = { .min = 11.25, .max = 12.75 };
+const F_EXTREMA_T thresholds5V = { .min = 4.25, .max = 5.75 };
+const F_EXTREMA_T thresholds3V3 = { .min = 2.8, .max = 3.7 };
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Program globals and counters:
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-uint16_t fanCycleCount = 0;                                // Cumulative, never resets.
-uint8_t tempHighCycleCount = 0;                            // Cumulative, never resets.
-F_EXTREMA_T voltageMcu = { .min = 999.9, .max = -999.9 };  // Inverted to normalize during runtime.
-F_EXTREMA_T voltageBbVcc = { .min = 999.9, .max = -999.9 };
-F_EXTREMA_T voltageBb5V = { .min = 999.9, .max = -999.9 };
-F_EXTREMA_T voltageBb3V3 = { .min = 999.9, .max = -999.9 };
-F_EXTREMA_T tempLifetime = { .min = 999.9, .max = -999.9 };
-I_EXTREMA_T externalClockLifetime = { .min = EXTERNAL_CLOCK_UPPERBOUND << 1, .max = -(EXTERNAL_CLOCK_UPPERBOUND << 1) };
-UI32_EXTREMA_T cooldownDurationLifetimeMs = { .min = UINT32_MAX, .max = 0 };
+uint16_t fanCycleCount = 0;                                       // Cumulative, never resets.
+uint8_t tempHighCycleCount = 0;                                   // Cumulative, never resets.
+F_EXTREMA_T voltageMcuExtrema = { .min = 999.9, .max = -999.9 };  // Inverted to normalize during runtime.
+F_EXTREMA_T voltageVccExtrema = { .min = 999.9, .max = -999.9 };
+F_EXTREMA_T voltage5VExtrema = { .min = 999.9, .max = -999.9 };
+F_EXTREMA_T voltage3V3Extrema = { .min = 999.9, .max = -999.9 };
+F_EXTREMA_T tempLifetimeExtrema = { .min = 999.9, .max = -999.9 };
+I32_EXTREMA_T externalClockLifetimeExtrema = { .min = EXTERNAL_CLOCK_UPPERBOUND << 1, .max = -(EXTERNAL_CLOCK_UPPERBOUND << 1) };
+UI32_EXTREMA_T voltageMcuThresholdCounts;
+UI32_EXTREMA_T voltageVccThresholdCounts;
+UI32_EXTREMA_T voltage5VThresholdCounts;
+UI32_EXTREMA_T voltage3V3ThresholdCounts;
+UI32_EXTREMA_T cooldownDurationLifetimeMsExtrema = { .min = UINT32_MAX, .max = 0 };
 uint8_t showSplashScreen = true;
 uint8_t showLastKnownError = true;
 uint32_t loopCount = 0;
-uint8_t allPixels[8] = {
-  0b11111,
-  0b11111,
-  0b11111,
-  0b11111,
-  0b11111,
-  0b11111,
-  0b11111,
-};
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Main program initialization.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -213,9 +161,9 @@ void setup(void) {
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   // Inputs:
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  pinMode(PIN_INPUT_BB_VCC_SENSE, INPUT);
-  pinMode(PIN_INPUT_BB_5V_SENSE, INPUT);
-  pinMode(PIN_INPUT_BB_3V3_SENSE, INPUT);
+  pinMode(PIN_INPUT_VCC_SENSE, INPUT);
+  pinMode(PIN_INPUT_5V_SENSE, INPUT);
+  pinMode(PIN_INPUT_3V3_SENSE, INPUT);
   pinMode(PIN_INPUT_THERMISTOR_SENSE, INPUT);
   pinMode(PIN_INPUT_BREADBOARD_ERROR_SENSE, INPUT_PULLUP);
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -229,7 +177,7 @@ void setup(void) {
   // Test LCD, buzzer, fan, and set power-on latch.
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   testLcd(3, 150, 25);
-  testBuzzer(buzzerTest);
+  testBuzzer(&melodyTest);
   testThermistorFan(3, 500);
   setPowerOnLatch(HIGH);
 }
@@ -238,9 +186,9 @@ void setup(void) {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void loop(void) {
   handleSplashScreen(DELAY_LCD_PAGE_CYCLE);
-  handleLastKnownError(DELAY_LCD_PAGE_CYCLE, buzzerShutdown);
+  handleLastKnownError(DELAY_LCD_PAGE_CYCLE, &melodyShutdown);
   handleLoopStart(DELAY_LCD_PAGE_CYCLE);
-  handleBreadboardError(buzzerShutdown);
+  handleBreadboardError();
 
   handleExternalClock(EXTERNAL_CLOCK_LOWERBOUND,
                       EXTERNAL_CLOCK_UPPERBOUND,
@@ -257,8 +205,7 @@ void loop(void) {
                       TEMP_COOLDOWN_MAX_MINUTES,
                       DELAY_LCD_PAGE_CYCLE);
 
-  handleVoltageReadings(DELAY_LCD_PAGE_CYCLE,
-                        buzzerVoltageThresholds);
+  handleVoltageReadings(DELAY_LCD_PAGE_CYCLE);
 
   handleUptime(DELAY_LCD_PAGE_CYCLE);
 
@@ -267,7 +214,7 @@ void loop(void) {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Seed by mixing analog noise and runtime for a higher degree of entropy.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void setupSeed() {
+void setupSeed(void) {
   unsigned long seed = 0;
 
   for (uint8_t i = 0; i < 32; i++) {
@@ -281,17 +228,17 @@ void setupSeed() {
   randomSeed(seed);
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Check and warn if Snubby or breadboard circuitry is reporting an error.
+// Check and warn if Snubby or other breadboard circuitry is reporting an error (active low).
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void handleBreadboardError(MELODY_T melody) {
+void handleBreadboardError(void) {
   uint8_t breadboardError = digitalRead(PIN_INPUT_BREADBOARD_ERROR_SENSE);
 
   if (!breadboardError) {
-    shutdown(ERROR_CODE_BREADBOARD, NULL, melody);
+    shutdown(ERROR_CODE_BREADBOARD, NULL);
   }
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-const char* getErrorCodeName(ERROR_CODE_T errorCode) {
+const char* const getErrorCodeName(ERROR_CODE_T errorCode) {
   if (errorCode >= ERROR_CODE_NONE && errorCode < ERROR_CODE_COUNT) {
     return ERROR_CODE_NAMES[errorCode];
   }
@@ -303,11 +250,11 @@ const char* getErrorCodeName(ERROR_CODE_T errorCode) {
 void handleExternalClock(int32_t rangeLowerbound, int32_t rangeUpperbound, uint8_t clockLengthMs, uint16_t lcdPageCycleDelayMs) {
   int32_t randomNumber = random(rangeLowerbound, rangeUpperbound + 1);
 
-  if (randomNumber < externalClockLifetime.min) {
-    externalClockLifetime.min = randomNumber;
+  if (randomNumber < externalClockLifetimeExtrema.min) {
+    externalClockLifetimeExtrema.min = randomNumber;
   }
-  if (randomNumber > externalClockLifetime.max) {
-    externalClockLifetime.max = randomNumber;
+  if (randomNumber > externalClockLifetimeExtrema.max) {
+    externalClockLifetimeExtrema.max = randomNumber;
   }
 
   if (randomNumber > 0) {
@@ -326,9 +273,9 @@ void handleExternalClock(int32_t rangeLowerbound, int32_t rangeUpperbound, uint8
   }
 
   // Write the number and the lifetime min/max.
-  printLabeledInt(0, 0, "C: ", randomNumber, true, lcdPageCycleDelayMs);
-  printLabeledInt(0, 0, "Cmin: ", externalClockLifetime.min, true, 0);
-  printLabeledInt(0, 1, "Cmax: ", externalClockLifetime.max, false, lcdPageCycleDelayMs);
+  printLabeledInt32(0, 0, "C: ", randomNumber, true, lcdPageCycleDelayMs);
+  printLabeledInt32(0, 0, "Cmin: ", externalClockLifetimeExtrema.min, true, 0);
+  printLabeledInt32(0, 1, "Cmax: ", externalClockLifetimeExtrema.max, false, lcdPageCycleDelayMs);
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Engages the power-on latch to keep the board powered automatically.
@@ -352,63 +299,33 @@ void testThermistorFan(uint8_t cycles, uint16_t fanCycleDelayMs) {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Plays a test tone for the buzzer.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void testBuzzer(MELODY_T melody) {
+void testBuzzer(const MELODY_T* const melody) {
   playMelody(melody);
-}
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Tests the board LCD.
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void testLcd(uint8_t backlightCycles, uint16_t backlightCycleDelayMs, uint8_t pixelCycleDelayMs) {
-  for (uint8_t i = 0; i < backlightCycles; i++) {
-    lcd.backlight();
-    delay(backlightCycleDelayMs);
-    if (i < backlightCycles - 1) {
-      lcd.noBacklight();
-      delay(backlightCycleDelayMs);
-    }
-  }
-
-  lcd.cursor_on();
-  lcd.blink_on();
-
-  lcd.setBacklight(255);
-  lcd.setContrast(255);
-
-  lcd.createChar(0, allPixels);
-
-  // Test pixels.
-  for (uint8_t i = 0; i < LCD_MAX_Y; i++) {
-    for (uint8_t j = 0; j < LCD_MAX_X; j++) {
-      lcd.setCursor(j, i);
-      lcd.write(byte(0));
-      delay(pixelCycleDelayMs);
-    }
-  }
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Plays a tone on the board's buzzer.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void playMelody(MELODY_T melody) {
-  for (uint8_t i = 0; i < melody.cycles; i++) {
-    tone(PIN_OUTPUT_BUZZER, melody.frequency, melody.durationMs);
-    if (i < melody.cycles - 1) {
+void playMelody(const MELODY_T* const melody) {
+  for (uint8_t i = 0; i < melody->cycles; i++) {
+    tone(PIN_OUTPUT_BUZZER, melody->frequency, melody->durationMs);
+    if (i < melody->cycles - 1) {
       // Wait until the tone finishes.
-      delay(melody.durationMs);
-      delay(melody.toneCycleDelayMs);
+      delay(melody->durationMs);
+      delay(melody->toneCycleDelayMs);
     }
   }
 
   // Avoid buzzer chirp during other transistions.
-  if (melody.pauseBeforeReturn) {
+  if (melody->pauseBeforeReturn) {
     delay(100);
   }
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Main error handler.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void shutdown(ERROR_CODE_T errorCode, uint32_t* errorFlags, MELODY_T melody) {
+void shutdown(ERROR_CODE_T errorCode, const uint32_t* const errorFlags) {
   // Playing the tone acts as the LCD page delay.
-  printLabeledInt(0, 0, "E: ", errorCode, true, 0);
+  printLabeledUInt8(0, 0, "E: ", errorCode, true, 0);
   printLabeledString(0, 1, "E: ", getErrorCodeName(errorCode), false, 0);
 
   size_t address = 0;
@@ -420,7 +337,7 @@ void shutdown(ERROR_CODE_T errorCode, uint32_t* errorFlags, MELODY_T melody) {
     address += sizeof(*errorFlags);
   }
 
-  playMelody(melody);
+  playMelody(&melodyShutdown);
   delay(5000);
 
   // Self-terminate.
@@ -431,18 +348,18 @@ void shutdown(ERROR_CODE_T errorCode, uint32_t* errorFlags, MELODY_T melody) {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void handleSplashScreen(uint16_t lcdPageCycleDelayMs) {
   if (showSplashScreen) {
-    char version[32], date[32], time[32];
+    char version[16], date[16], time[16];
 
     printString(0, 0, "Illusion", true, 0);
     printString(0, 1, "Interactive", false, lcdPageCycleDelayMs);
 
-    sprintf(version, "v%u.%u.%u", FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH);
+    snprintf(version, sizeof(version), "v%" PRIu8 ".%" PRIu8 ".%" PRIu8, FW_VERSION_MAJOR, FW_VERSION_MINOR, FW_VERSION_PATCH);
 
     printString(0, 0, "Patchworks", true, 0);
     printString(0, 1, version, false, lcdPageCycleDelayMs);
 
-    sprintf(date, "%s", __DATE__);
-    sprintf(time, "%s", __TIME__);
+    snprintf(date, sizeof(date), "%s", __DATE__);
+    snprintf(time, sizeof(date), "%s", __TIME__);
 
     printString(0, 0, date, true, 0);
     printString(0, 1, time, false, lcdPageCycleDelayMs);
@@ -453,7 +370,7 @@ void handleSplashScreen(uint16_t lcdPageCycleDelayMs) {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Handles the last known error on startup if there was an automatic fault shutdown.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void handleLastKnownError(uint16_t lcdPageCycleDelayMs, MELODY_T melody) {
+void handleLastKnownError(uint16_t lcdPageCycleDelayMs, const MELODY_T* const melody) {
   if (showLastKnownError) {
     ERROR_CODE_T errorCode;
     uint32_t errorFlags;
@@ -466,7 +383,7 @@ void handleLastKnownError(uint16_t lcdPageCycleDelayMs, MELODY_T melody) {
       EEPROM.get(address, errorFlags);
       address += sizeof(errorFlags);
 
-      printLabeledInt(0, 0, "El: ", errorCode, true, 0);
+      printLabeledUInt8(0, 0, "El: ", errorCode, true, 0);
       printLabeledString(0, 1, "El: ", getErrorCodeName(errorCode), false, 0);
 
       // Alert in case we're not looking at the LCD.
@@ -488,7 +405,7 @@ void handleLoopStart(uint16_t lcdPageCycleDelayMs) {
   ++loopCount;
 
   // Write the loop count.
-  printLabeledInt(0, 0, "L: ", loopCount, true, lcdPageCycleDelayMs);
+  printLabeledUInt32(0, 0, "L: ", loopCount, true, lcdPageCycleDelayMs);
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Handles actions at the loop end.
@@ -551,17 +468,17 @@ float handleThermistor(uint8_t writeAdc, uint8_t writeResistance, uint16_t lcdPa
   tempNow = 1.0 / tempNow;                                               // Invert
   tempNow -= TEMP_ZERO_KELVIN;                                           // Convert absolute temperature to Celcius.
 
-  if (tempNow < tempLifetime.min) {
-    tempLifetime.min = tempNow;
+  if (tempNow < tempLifetimeExtrema.min) {
+    tempLifetimeExtrema.min = tempNow;
   }
-  if (tempNow > tempLifetime.max) {
-    tempLifetime.max = tempNow;
+  if (tempNow > tempLifetimeExtrema.max) {
+    tempLifetimeExtrema.max = tempNow;
   }
 
   // Write the calculated temperature and the min/max noticed.
   printLabeledFloat(0, 0, "T: ", tempNow, true, lcdPageCycleDelayMs);
-  printLabeledFloat(0, 0, "Tmin: ", tempLifetime.min, true, 0);
-  printLabeledFloat(0, 1, "Tmax: ", tempLifetime.max, false, lcdPageCycleDelayMs);
+  printLabeledFloat(0, 0, "Tmin: ", tempLifetimeExtrema.min, true, 0);
+  printLabeledFloat(0, 1, "Tmax: ", tempLifetimeExtrema.max, false, lcdPageCycleDelayMs);
 
   return tempNow;
 }
@@ -648,42 +565,75 @@ float readMcuVoltage(void) {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Retrieves and displays voltages for the MCU and breadboard rails.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void handleVoltageReadings(int16_t lcdPageCycleDelayMs, MELODY_T warningMelody) {
+void handleVoltageReadings(int16_t lcdPageCycleDelayMs) {
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
   // Capture voltages, extremas, display, and warn:
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  float mcuVcc = readMcuVoltage();
-  captureExtrema(mcuVcc, &voltageMcu);
-  printLabeledFloat(0, 0, "Vmcu: ", mcuVcc, true, lcdPageCycleDelayMs);
-  checkThresholds("Vmcu", mcuVcc, vMcuThresholds, lcdPageCycleDelayMs, warningMelody);
-  printLabeledFloat(0, 0, "Vmcu Min: ", voltageMcu.min, true, 0);
-  printLabeledFloat(0, 1, "Vmcu Max: ", voltageMcu.max, false, lcdPageCycleDelayMs);
+  handleVoltageReading(readMcuVoltage(),
+                       "Vmcu",
+                       &voltageMcuExtrema,
+                       &thresholdsMcu,
+                       &voltageMcuThresholdCounts,
+                       lcdPageCycleDelayMs);
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  float bbVcc = readVoltage(PIN_INPUT_BB_VCC_SENSE);
-  captureExtrema(bbVcc, &voltageBbVcc);
-  printLabeledFloat(0, 0, "Vcc: ", bbVcc, true, lcdPageCycleDelayMs);
-  checkThresholds("Vcc", bbVcc, vBbVccThresholds, lcdPageCycleDelayMs, warningMelody);
-  printLabeledFloat(0, 0, "Vcc Min: ", voltageBbVcc.min, true, 0);
-  printLabeledFloat(0, 1, "Vcc Max: ", voltageBbVcc.max, false, lcdPageCycleDelayMs);
+  handleVoltageReading(readVoltage(PIN_INPUT_VCC_SENSE),
+                       "Vcc",
+                       &voltageVccExtrema,
+                       &thresholdsVcc,
+                       &voltageVccThresholdCounts,
+                       lcdPageCycleDelayMs);
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  float bb5V = readVoltage(PIN_INPUT_BB_5V_SENSE);
-  captureExtrema(bb5V, &voltageBb5V);
-  printLabeledFloat(0, 0, "5V: ", bb5V, true, lcdPageCycleDelayMs);
-  checkThresholds("5V", bb5V, vBb5VThresholds, lcdPageCycleDelayMs, warningMelody);
-  printLabeledFloat(0, 0, "5V Min: ", voltageBb5V.min, true, 0);
-  printLabeledFloat(0, 1, "5V Max: ", voltageBb5V.max, false, lcdPageCycleDelayMs);
+  handleVoltageReading(readVoltage(PIN_INPUT_5V_SENSE),
+                       "5V",
+                       &voltage5VExtrema,
+                       &thresholds5V,
+                       &voltage5VThresholdCounts,
+                       lcdPageCycleDelayMs);
   ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-  float bb3V3 = readVoltage(PIN_INPUT_BB_3V3_SENSE);
-  captureExtrema(bb3V3, &voltageBb3V3);
-  printLabeledFloat(0, 0, "3V3: ", bb3V3, true, lcdPageCycleDelayMs);
-  checkThresholds("3V3", bb3V3, vBb3V3Thresholds, lcdPageCycleDelayMs, warningMelody);
-  printLabeledFloat(0, 0, "3V3 Min: ", voltageBb3V3.min, true, 0);
-  printLabeledFloat(0, 1, "3V3 Max: ", voltageBb3V3.max, false, lcdPageCycleDelayMs);
+  handleVoltageReading(readVoltage(PIN_INPUT_3V3_SENSE),
+                       "3V3",
+                       &voltage3V3Extrema,
+                       &thresholds3V3,
+                       &voltage3V3ThresholdCounts,
+                       lcdPageCycleDelayMs);
+}
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Handles rails atomically.
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+void handleVoltageReading(float voltage, const char* const rail, F_EXTREMA_T* const extrema, const F_EXTREMA_T* const thresholds, UI32_EXTREMA_T* const thresholdExceededCounts, const int16_t lcdPageCycleDelayMs) {
+  char label[16];
+
+  // Active voltage:
+  captureExtrema(voltage, extrema);
+  snprintf(label, sizeof(label), "%s: ", rail);
+  printLabeledFloat(0, 0, label, voltage, true, lcdPageCycleDelayMs);
+
+  // Low/high warnings:
+  checkThresholds(rail, voltage, thresholds, thresholdExceededCounts, lcdPageCycleDelayMs);
+
+  // Lifetime min/max's:
+  snprintf(label, sizeof(label), "%s Min: ", rail);
+  printLabeledFloat(0, 0, label, extrema->min, true, 0);
+  snprintf(label, sizeof(label), "%s Max: ", rail);
+  printLabeledFloat(0, 1, label, extrema->max, false, lcdPageCycleDelayMs);
+
+  // Lifetime thresholds met or exceeded counts:
+  snprintf(label, sizeof(label), "%s Vlc: ", rail);
+  printLabeledUInt32(0, 0, label, thresholdExceededCounts->min, true, 0);
+  snprintf(label, sizeof(label), "%s Vhc: ", rail);
+  printLabeledUInt32(0, 1, label, thresholdExceededCounts->max, false, lcdPageCycleDelayMs);
+
+  // Shutdown if the voltage low/high counts exceed the maximum allowed.
+  if (thresholdExceededCounts->min >= VOLTAGE_LOW_MAXIMUM_CYCLE_COUNT) {
+    shutdown(ERROR_CODE_VOLTAGE_LOW_COUNT, NULL);
+  } else if (thresholdExceededCounts->max >= VOLTAGE_HIGH_MAXIMUM_CYCLE_COUNT) {
+    shutdown(ERROR_CODE_VOLTAGE_HIGH_COUNT, NULL);
+  }
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Updates the extremas for the measured voltages.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void captureExtrema(float voltage, F_EXTREMA_T* extrema) {
+void captureExtrema(float voltage, F_EXTREMA_T* const extrema) {
   if (voltage < extrema->min) {
     extrema->min = voltage;
   }
@@ -692,25 +642,27 @@ void captureExtrema(float voltage, F_EXTREMA_T* extrema) {
   }
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Checks the provided voltage against the allowed thresholds to determine if a warning should sound.
+// Checks the provided voltage against the allowed thresholds to determine if a warning should be raised.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void checkThresholds(const char* rail, float voltage, F_EXTREMA_T thresholds, uint16_t lcdPageCycleDelayMs, MELODY_T melody) {
-  if (voltage <= thresholds.min) {
-    warn(rail, "Low", voltage, thresholds, lcdPageCycleDelayMs, melody);
-  } else if (voltage >= thresholds.max) {
-    warn(rail, "High", voltage, thresholds, lcdPageCycleDelayMs, melody);
+void checkThresholds(const char* const rail, float voltage, const F_EXTREMA_T* const thresholds, UI32_EXTREMA_T* const counts, uint16_t lcdPageCycleDelayMs) {
+  if (voltage <= thresholds->min) {
+    counts->min++;
+    warn(rail, "Low", voltage, thresholds, lcdPageCycleDelayMs, &melodyVoltageThresholds);
+  } else if (voltage >= thresholds->max) {
+    counts->max++;
+    warn(rail, "High", voltage, thresholds, lcdPageCycleDelayMs, &melodyVoltageThresholds);
   }
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Display and warn for exceeded voltage thresholds.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void warn(const char* rail, const char* state, float voltage, F_EXTREMA_T thresholds, uint16_t lcdPageCycleDelayMs, MELODY_T melody) {
-  char warn[32], range[32], floatMin[8], floatMax[8];
+void warn(const char* const rail, const char* const state, float voltage, const F_EXTREMA_T* const thresholds, uint16_t lcdPageCycleDelayMs, const MELODY_T* const melody) {
+  char warn[16], range[16], floatMin[8], floatMax[8];
 
   snprintf(warn, sizeof(warn), "%s %s: ", rail, state);
 
-  dtostrf(thresholds.min, 1, 2, floatMin);
-  dtostrf(thresholds.max, 1, 2, floatMax);
+  dtostrf(thresholds->min, 1, 2, floatMin);
+  dtostrf(thresholds->max, 1, 2, floatMax);
   snprintf(range, sizeof(range), "(%s - %s)", floatMin, floatMax);
 
   playMelody(melody);
@@ -721,22 +673,20 @@ void warn(const char* rail, const char* state, float voltage, F_EXTREMA_T thresh
 // Tracks the min and max cooldown durations.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void captureCooldownDuration(uint32_t cooldownStartMs) {
-  uint32_t currentMs = millis();
-  uint32_t deltaMs = currentMs - cooldownStartMs;
+  uint32_t deltaMs = millis() - cooldownStartMs;
 
-  if (deltaMs > 0 && deltaMs < cooldownDurationLifetimeMs.min) {
-    cooldownDurationLifetimeMs.min = deltaMs;
+  if (deltaMs > 0 && deltaMs < cooldownDurationLifetimeMsExtrema.min) {
+    cooldownDurationLifetimeMsExtrema.min = deltaMs;
   }
-  if (deltaMs > cooldownDurationLifetimeMs.max) {
-    cooldownDurationLifetimeMs.max = deltaMs;
+  if (deltaMs > cooldownDurationLifetimeMsExtrema.max) {
+    cooldownDurationLifetimeMsExtrema.max = deltaMs;
   }
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Handles self-termination if the cooldown exceeds the max duration.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 uint8_t handleCooldownExceeded(uint32_t cooldownStartMs, uint8_t cooldownMinutesMax) {
-  uint32_t currentMs = millis();
-  uint32_t elapsedMs = currentMs - cooldownStartMs;
+  uint32_t elapsedMs = millis() - cooldownStartMs;
 
   uint32_t maxCooldownMs = (uint32_t)cooldownMinutesMax * 60UL * 1000UL;
 
@@ -745,25 +695,25 @@ uint8_t handleCooldownExceeded(uint32_t cooldownStartMs, uint8_t cooldownMinutes
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Displays the formatted min and max cooldown durations.
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void handleCooldownMessage(UI32_EXTREMA_T cooldownDurationLifetimeMsExtrema, uint16_t lcdPageCycleDelayMs) {
-  char minDuration[32], maxDuration[32];
+void handleCooldownMessage(const UI32_EXTREMA_T* const cooldownDurationLifetimeMsExtrema, uint16_t lcdPageCycleDelayMs) {
+  char minDuration[16], maxDuration[16];
 
-  if (cooldownDurationLifetimeMsExtrema.min == UINT32_MAX) {
-    sprintf(minDuration, "Dmin: --m --s");
+  if (cooldownDurationLifetimeMsExtrema->min == UINT32_MAX) {
+    snprintf(minDuration, sizeof(minDuration), "Dmin: -- m -- s");
   } else {
-    uint32_t minSeconds = cooldownDurationLifetimeMsExtrema.min / 1000;
+    uint32_t minSeconds = cooldownDurationLifetimeMsExtrema->min / 1000;
     uint32_t minMinutes = minSeconds / 60;
     minSeconds = minSeconds % 60;
-    sprintf(minDuration, "Dmin: %02lum %02lus", minMinutes, minSeconds);
+    snprintf(minDuration, sizeof(minDuration), "Dmin: %02" PRIu32 " m %02" PRIu32 " s", minMinutes, minSeconds);
   }
 
-  if (cooldownDurationLifetimeMsExtrema.max == 0) {
-    sprintf(maxDuration, "Dmax: --m --s");
+  if (cooldownDurationLifetimeMsExtrema->max == 0) {
+    snprintf(maxDuration, sizeof(maxDuration), "Dmax: -- m -- s");
   } else {
-    uint32_t maxSeconds = cooldownDurationLifetimeMsExtrema.max / 1000;
+    uint32_t maxSeconds = cooldownDurationLifetimeMsExtrema->max / 1000;
     uint32_t maxMinutes = maxSeconds / 60;
     maxSeconds = maxSeconds % 60;
-    sprintf(maxDuration, "Dmax: %02lum %02lus", maxMinutes, maxSeconds);
+    snprintf(maxDuration, sizeof(maxDuration), "Dmax: %02" PRIu32 " m %02" PRIu32 " s", maxMinutes, maxSeconds);
   }
 
   printString(0, 0, minDuration, true, 0);
@@ -779,14 +729,14 @@ void handleThermistorFan(float currentTemperature, float tempLowerbound, float t
   if (currentTemperature >= tempUpperbound) {
     // Warn that it's above max.
     if (currentTemperature >= tempMax) {
-      playMelody(buzzerMaxTemp);
+      playMelody(&melodyMaxTemp);
       // Turn power off if we've been consistently running hot.
       if (tempHighCycleCount++ >= TEMP_MAXIMUM_CYCLE_COUNT) {
-        shutdown(ERROR_CODE_HOT_CYCLES, NULL, buzzerShutdown);
+        shutdown(ERROR_CODE_HOT_CYCLES, NULL);
       }
     } else {
       // Warn that it's above upperbound.
-      playMelody(buzzerFanOn);
+      playMelody(&melodyFanOn);
     }
 
     if (!isCoolingDown) {
@@ -799,7 +749,7 @@ void handleThermistorFan(float currentTemperature, float tempLowerbound, float t
       printString(0, 0, "Fan Enabled", true, lcdPageCycleDelayMs);
     }
   } else if (currentTemperature <= tempLowerbound && isCoolingDown) {
-    playMelody(buzzerFanOff);
+    playMelody(&melodyFanOff);
 
     isCoolingDown = false;
     digitalWrite(PIN_OUTPUT_FAN_ENABLE, LOW);
@@ -810,7 +760,7 @@ void handleThermistorFan(float currentTemperature, float tempLowerbound, float t
 
   // Handle if we're not cooling down fast enough.
   if (isCoolingDown && handleCooldownExceeded(cooldownStartMs, cooldownMinutesMax)) {
-    shutdown(ERROR_CODE_COOLDOWN, NULL, buzzerShutdown);
+    shutdown(ERROR_CODE_COOLDOWN, NULL);
   }
 
   // Fan temperature bounds.
@@ -818,9 +768,9 @@ void handleThermistorFan(float currentTemperature, float tempLowerbound, float t
   printLabeledFloat(0, 1, "Fmax: ", tempUpperbound, false, lcdPageCycleDelayMs);
 
   // Write out min and max cooldown durations.
-  handleCooldownMessage(cooldownDurationLifetimeMs, lcdPageCycleDelayMs);
+  handleCooldownMessage(&cooldownDurationLifetimeMsExtrema, lcdPageCycleDelayMs);
 
   // Number of cycles the fan was turned on.
-  printLabeledInt(0, 0, "Fcc: ", fanCycleCount, true, lcdPageCycleDelayMs);
+  printLabeledUInt16(0, 0, "Fcc: ", fanCycleCount, true, lcdPageCycleDelayMs);
 }
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
