@@ -4,7 +4,7 @@ This project consists of a set of custom electronics prototyping boards designed
 
 - An MCU controlled LCD display.
 - Voltage, current, power (V/A/W), and ambient temperature gauges.
-- Regulated 3.3V, 5V, and VCC rails (7-12 VDC) for the dual 830 tie-point breadboards.
+- Regulated 3.3V, 5V, and VADJ rails (7-12 VDC) for the dual 830 tie-point breadboards.
 - A main ATmega328P Arduino Uno R3 for system monitoring (e.g., temperature and fan control for the main regulator, and power safety with the main relay).
 
 > If you found this project useful, interesting, or worth keeping an eye on, consider giving it a ⭐️.
@@ -16,16 +16,22 @@ This project consists of a set of custom electronics prototyping boards designed
 - Contain related variables in structs or convert to fully object-oriented to encapsulate fixed point arithmetic, LCD functions, and chip setup, among others.
 - Doxygen documentation.
 
-## 🔹 Rev 1.1 Schematic
+## 🔹 Rev 1.2 Construction
 
-![Rev 1.1](<Schematics/Rev 1.1.png>)
+![Patchworks Rev 1.2 Snubby Rev A](<Construction/Patchworks Rev 1.2 Snubby Rev A.jpg>)
 
-## 🔹 V1.4.0 Firmware For Rev 1.1 Schematic
+![Patchworks Rev 1.2 Snubby Rev B](<Construction/Patchworks Rev 1.2 Snubby Rev B.jpg>)
+
+## 🔹 Rev 1.2 Schematic
+
+![Rev 1.2](<Schematics/Rev 1.2.png>)
+
+## 🔹 V1.4.0 Firmware For Rev 1.2 Schematic
 
 - Voltage low/high counts + shutdown.
 - Refactoring.
 
-## 🔹 V1.3.0 Firmware For Rev 1.1 Schematic
+## 🔹 V1.3.0 Firmware For Rev 1.2 Schematic
 
 - MCU supervised low/high voltage detection for all voltage rails.
 - Hardware overvoltage detection and automatic shutdown via [Snubby](https://github.com/Broosky/Snubby).
@@ -36,10 +42,15 @@ This project consists of a set of custom electronics prototyping boards designed
 - Additional flyback diode on the regulator fan.
 - Remove random determinism.
 - Firmware review, refactoring, and clean-up.
+- Schematic labelling, VIN2 fusing.
 
 ## 🔹 Rev 1 Construction
 
 ![Patchworks Rev 1](<Construction/Patchworks Rev 1.jpg>)
+
+## 🔹 Rev 1 Schematic
+
+![Rev 1](<Schematics/Rev 1.png>)
 
 ## 🔹 V1.2.0 Firmware For Rev 1 Schematic
 
@@ -78,7 +89,7 @@ This project consists of a set of custom electronics prototyping boards designed
 - Right side:
   - Christmas tree
 
-![Bench](Bench.jpg)
+![Other Repositories](<Other Repositories.jpg>)
 
 ##
 
